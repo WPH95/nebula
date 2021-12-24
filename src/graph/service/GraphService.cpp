@@ -16,17 +16,33 @@
 #include "graph/service/RequestContext.h"
 #include "graph/stats/StatsDef.h"
 #include "version/Version.h"
+#include <iostream>
+#include <sstream>
+#include <opentracing/mocktracer/json_recorder.h>
+#include <opentracing/mocktracer/tracer.h>
+using namespace opentracing;
+using namespace opentracing::mocktracer;
 
 namespace nebula {
 namespace graph {
 
 Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecutor,
                           const HostAddr& hostAddr) {
+
+  MockTracerOptions traceOptions;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new JsonRecorder{std::move(output)}};
+
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(traceOptions)}};
+
+
+
   auto addrs = network::NetworkUtils::toHosts(FLAGS_meta_server_addrs);
   if (!addrs.ok()) {
     return addrs.status();
   }
-
   meta::MetaClientOptions options;
   options.serviceName_ = "graph";
   options.skipConfig_ = FLAGS_local_config;
