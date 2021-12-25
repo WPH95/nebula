@@ -7,7 +7,11 @@
 #include <folly/ssl/Init.h>
 #include <signal.h>
 #include <string.h>
+#include <iostream>
+#include <sstream>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <opentracing/mocktracer/json_recorder.h>
+#include <opentracing/mocktracer/tracer.h>
 
 #include "common/base/Base.h"
 #include "common/base/SignalHandler.h"
@@ -28,6 +32,8 @@ using nebula::StatusOr;
 using nebula::fs::FileUtils;
 using nebula::graph::GraphService;
 using nebula::network::NetworkUtils;
+using opentracing;
+using opentracing::mocktracer;
 
 static std::unique_ptr<apache::thrift::ThriftServer> gServer;
 
@@ -44,6 +50,20 @@ DECLARE_string(flagfile);
 DECLARE_bool(containerized);
 
 int main(int argc, char *argv[]) {
+  std::cout << "start graphd" << "\n";
+  MockTracerOptions options;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  std::ostringstream& oss = *output;
+  options.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new JsonRecorder{std::move(output)}};
+
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(options)}};
+
+  auto parent_span = tracer->StartSpan("parent");
+  auto child_span =
+        tracer->StartSpan("childA", {ChildOf(&parent_span->context())});
+  std::cout << oss.str() << "\n";
   google::SetVersionString(nebula::versionString());
   if (argc == 1) {
     printHelp(argv[0]);
