@@ -12,7 +12,7 @@
 #include "graph/session/ClientSession.h"
 #include "graph/session/GraphSessionManager.h"
 #include "interface/gen-cpp2/GraphService.h"
-
+#include <opentracing/span.h>
 /**
  * RequestContext holds context infos of a specific request from a client.
  * The typical use is:
@@ -67,10 +67,23 @@ class RequestContext final : public cpp::NonCopyable, public cpp::NonMovable {
 
   GraphSessionManager* sessionMgr() const { return sessionMgr_; }
 
+  void setSpan(std::unique_ptr<opentracing::Span> span) { span_ = std::move(span); }
+
+   opentracing::Span* span()  { return span_.get(); }
+
+  void setTracer(std::shared_ptr<opentracing::Tracer> tracer) { tracer_ = std::move(tracer ); }
+   opentracing::Tracer* tracer()  { return tracer_.get(); }
+  void setTraceOut(std::shared_ptr<std::ostringstream> traceOut) {traceOut_ = std::move(traceOut );}
+   std::shared_ptr<std::ostringstream> traceOut() {return traceOut_;}
+
  private:
   time::Duration duration_;
   std::string query_;
   Response resp_;
+  std::shared_ptr<opentracing::Tracer> tracer_;
+  std::unique_ptr<opentracing::Span> span_;
+  std::shared_ptr<std::ostringstream> traceOut_;
+
   folly::Promise<Response> promise_;
   std::shared_ptr<ClientSession> session_;
   folly::Executor* runner_{nullptr};

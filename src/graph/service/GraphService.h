@@ -41,13 +41,21 @@ class GraphService final : public cpp2::GraphServiceSvIf {
   folly::Future<cpp2::VerifyClientVersionResp> future_verifyClientVersion(
       const cpp2::VerifyClientVersionReq& req) override;
 
+
+
+
  private:
   bool auth(const std::string& username, const std::string& password);
 
   std::unique_ptr<GraphSessionManager> sessionManager_;
   std::unique_ptr<QueryEngine> queryEngine_;
   std::unique_ptr<meta::MetaClient> metaClient_;
+
+  std::unique_ptr<std::ostringstream> traceOut;
+  std::shared_ptr<opentracing::Tracer> tracer_;
+
 };
+
 
 }  // namespace graph
 }  // namespace nebula

@@ -40,27 +40,8 @@ Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecuto
   options.role_ = meta::cpp2::HostRole::GRAPH;
   options.localHost_ = hostAddr;
   options.gitInfoSHA_ = gitInfoSha();
-  LOG(INFO) << "start init graph service tracing" << "\n";
- 
-  MockTracerOptions traceOptions;
-  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
-  std::ostringstream& oss = *output;
-  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
-      new JsonRecorder{std::move(output)}};
 
-  std::shared_ptr<opentracing::Tracer> tracer{
-      new MockTracer{std::move(traceOptions)}};
-
-  auto parent_span = tracer->StartSpan("test init");
-  auto child_span =
-        tracer->StartSpan("test init childA", {ChildOf(&parent_span->context())});
-  child_span->Finish();
-  parent_span->Finish();
-  tracer->Close();
-  LOG(INFO) << oss.str() << "\n";
-  LOG(INFO) << "start init graph service tracing 55" << "\n";
   metaClient_ = std::make_unique<meta::MetaClient>(ioExecutor, std::move(addrs.value()), options);
-
   // load data try 3 time
   bool loadDataOk = metaClient_->waitForMetadReady(3);
   if (!loadDataOk) {
@@ -142,23 +123,38 @@ void GraphService::signout(int64_t sessionId) {
 
 folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
                                                               const std::string& query) {
-  
+  if (tracer_.get() == nullptr) {
+    MockTracerOptions traceOptions;
+    std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+    traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
+        new JsonRecorder{std::move(output)}};
+
+    std::shared_ptr<opentracing::Tracer> tracer{
+        new MockTracer{std::move(traceOptions)}};
+    tracer_ = std::move(tracer);
+    traceOut = std::move(output);
+
+  }
+
+
   LOG(INFO) << "start execute query " << query << "\n";
- 
-  MockTracerOptions traceOptions;
-  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
-  std::ostringstream& oss = *output;
-  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
-      new JsonRecorder{std::move(output)}};
 
-  std::shared_ptr<opentracing::Tracer> tracer{
-      new MockTracer{std::move(traceOptions)}};
 
-  auto parent_span = tracer->StartSpan("test query");
+  LOG(INFO) << tracer_ << query << "\n";
+
+  auto parent_span = tracer_ -> StartSpan("graph query");
   parent_span->SetTag("query", query);
-  
+  LOG(INFO) << "test3 " << query << "\n";
+
   auto ctx = std::make_unique<RequestContext<ExecutionResponse>>();
   ctx->setQuery(query);
+  LOG(INFO) << "test10 " << query << "\n";
+
+  ctx->setSpan(std::move(parent_span));
+  LOG(INFO) << "test15 " << query << "\n";
+
+  ctx->setTracer(std::move(tracer_));
+  ctx->setTraceOut(std::move(traceOut));
   ctx->setRunner(getThreadManager());
   ctx->setSessionMgr(sessionManager_.get());
   auto future = ctx->future();
@@ -170,6 +166,8 @@ folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
     ctx->finish();
     return future;
   }
+  LOG(INFO) << "Hello1" << "\n";
+
   auto cb = [this, sessionId, ctx = std::move(ctx)](
                 StatusOr<std::shared_ptr<ClientSession>> ret) mutable {
     if (!ret.ok()) {
@@ -188,14 +186,22 @@ folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
       return ctx->finish();
     }
     ctx->setSession(std::move(sessionPtr));
+    LOG(INFO) << "Hello3" << "\n";
     queryEngine_->execute(std::move(ctx));
+    LOG(INFO) << "Hello2" << "\n";
+
+    auto *span = ctx->span();
+    span->Finish();
+    LOG(INFO) << "parent_span finish" << "\n";
+
+    ctx->traceOut();
+//    LOG(INFO) << ctx->traceOut()  << "\n";
+
   };
   sessionManager_->findSession(sessionId, getThreadManager()).thenValue(std::move(cb));
-  
-  parent_span->Finish();
-  tracer->Close();
-  LOG(INFO) << oss.str() << "\n";
   LOG(INFO) << "start query end" << "\n";
+      LOG(INFO) << traceOut -> str()  << "\n";
+      LOG(INFO) << "traceOut end" << "\n";
 
   return future;
 }
@@ -248,5 +254,6 @@ folly::Future<cpp2::VerifyClientVersionResp> GraphService::future_verifyClientVe
   }
   return folly::makeFuture<cpp2::VerifyClientVersionResp>(std::move(resp));
 }
+
 }  // namespace graph
 }  // namespace nebula

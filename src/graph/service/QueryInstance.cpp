@@ -18,6 +18,9 @@
 #include "graph/util/AstUtils.h"
 #include "graph/validator/Validator.h"
 #include "parser/ExplainSentence.h"
+#include <opentracing/mocktracer/tracer.h>
+
+using namespace opentracing;
 
 using nebula::opt::Optimizer;
 using nebula::opt::OptRule;
@@ -60,7 +63,14 @@ void QueryInstance::execute() {
 }
 
 Status QueryInstance::validateAndOptimize() {
+  LOG(INFO) << "Hello10" << "\n";
+
   auto *rctx = qctx()->rctx();
+//  auto *parent_span = rctx->span();
+  auto *tracer = rctx->tracer();
+  LOG(INFO) << "Hello11" << "\n";
+
+  auto child_span = tracer->StartSpan("validateAndOptimize");
   VLOG(1) << "Parsing query: " << rctx->query();
   auto result = GQLParser(qctx()).parse(rctx->query());
   NG_RETURN_IF_ERROR(result);
@@ -68,6 +78,8 @@ Status QueryInstance::validateAndOptimize() {
 
   NG_RETURN_IF_ERROR(Validator::validate(sentence_.get(), qctx()));
   NG_RETURN_IF_ERROR(findBestPlan());
+  child_span->Finish();
+  LOG(INFO) << "Hello14" << "\n";
 
   return Status::OK();
 }

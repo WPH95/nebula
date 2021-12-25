@@ -17,7 +17,10 @@ nebula_add_library(
     QueryEngine.cpp
     QueryInstance.cpp
 )
-
+nebula_add_library(
+    trace_obj OBJECT
+    trace.cpp
+)
 nebula_add_library(
     graph_auth_obj OBJECT
     PermissionManager.cpp

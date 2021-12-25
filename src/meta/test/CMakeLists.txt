@@ -72,20 +72,20 @@ nebula_add_test(
         gtest
 )
 
-nebula_add_test(
-    NAME
-        meta_client_test
-    SOURCES
-        MetaClientTest.cpp
-    OBJECTS
-        ${meta_test_deps}
-    LIBRARIES
-        ${ROCKSDB_LIBRARIES}
-        ${THRIFT_LIBRARIES}
-        ${PROXYGEN_LIBRARIES}
-        wangle
-        gtest
-)
+#nebula_add_test(
+#    NAME
+#        meta_client_test
+#    SOURCES
+#        MetaClientTest.cpp
+#    OBJECTS
+#        ${meta_test_deps}
+#    LIBRARIES
+#        ${ROCKSDB_LIBRARIES}
+#        ${THRIFT_LIBRARIES}
+#        ${PROXYGEN_LIBRARIES}
+#        wangle
+#        gtest
+#)
 
 nebula_add_test(
     NAME
