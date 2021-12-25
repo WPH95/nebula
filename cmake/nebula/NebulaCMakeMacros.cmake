@@ -80,7 +80,7 @@ macro(nebula_link_libraries target)
         folly
         fmt
         glog
-        OpenTracing::opentracing
+        OpenTracing::opentracing_mocktracer
         gflags
         boost_context
         boost_system

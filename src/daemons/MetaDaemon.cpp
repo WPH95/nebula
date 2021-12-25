@@ -5,6 +5,10 @@
 
 #include <folly/ssl/Init.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <opentracing/mocktracer/json_recorder.h>
+#include <opentracing/mocktracer/tracer.h>
+#include <iostream>
+#include <sstream>
 
 #include "common/base/Base.h"
 #include "common/base/SignalHandler.h"
@@ -37,6 +41,8 @@ using nebula::Status;
 using nebula::StatusOr;
 using nebula::network::NetworkUtils;
 using nebula::web::PathParams;
+using namespace opentracing;
+using namespace opentracing::mocktracer;
 
 DEFINE_string(local_ip, "", "Local ip specified for NetworkUtils::getLocalIP");
 DEFINE_int32(port, 45500, "Meta daemon listening port");
@@ -190,6 +196,24 @@ Status initWebService(nebula::WebService* svc,
 }
 
 int main(int argc, char* argv[]) {
+  std::cout << "start metad" << "\n";
+  MockTracerOptions options;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  std::ostringstream& oss = *output;
+  options.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new JsonRecorder{std::move(output)}};
+
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(options)}};
+
+  auto parent_span = tracer->StartSpan("start metad");
+  auto child_span =
+        tracer->StartSpan("childA", {ChildOf(&parent_span->context())});
+  child_span->SetTag("A","a1");
+  child_span->Finish();
+  parent_span->Finish();
+  tracer->Close();
+  std::cout << oss.str() << "\n";
   google::SetVersionString(nebula::versionString());
   // Detect if the server has already been started
   // Check pid before glog init, in case of user may start daemon twice
