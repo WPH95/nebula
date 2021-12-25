@@ -41,8 +41,8 @@ using nebula::Status;
 using nebula::StatusOr;
 using nebula::network::NetworkUtils;
 using nebula::web::PathParams;
-using opentracing;
-using opentracing::mocktracer;
+using namespace opentracing;
+using namespace opentracing::mocktracer;
 
 DEFINE_string(local_ip, "", "Local ip specified for NetworkUtils::getLocalIP");
 DEFINE_int32(port, 45500, "Meta daemon listening port");
@@ -206,9 +206,13 @@ int main(int argc, char* argv[]) {
   std::shared_ptr<opentracing::Tracer> tracer{
       new MockTracer{std::move(options)}};
 
-  auto parent_span = tracer->StartSpan("parent");
+  auto parent_span = tracer->StartSpan("start metad");
   auto child_span =
         tracer->StartSpan("childA", {ChildOf(&parent_span->context())});
+  child_span->SetTag("A","a1");
+  child_span->Finish();
+  parent_span->Finish();
+  tracer->Close();
   std::cout << oss.str() << "\n";
   google::SetVersionString(nebula::versionString());
   // Detect if the server has already been started

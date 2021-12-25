@@ -32,8 +32,8 @@ using nebula::StatusOr;
 using nebula::fs::FileUtils;
 using nebula::graph::GraphService;
 using nebula::network::NetworkUtils;
-using opentracing;
-using opentracing::mocktracer;
+using namespace opentracing;
+using namespace opentracing::mocktracer;
 
 static std::unique_ptr<apache::thrift::ThriftServer> gServer;
 
@@ -50,7 +50,7 @@ DECLARE_string(flagfile);
 DECLARE_bool(containerized);
 
 int main(int argc, char *argv[]) {
-  std::cout << "start graphd" << "\n";
+  std::cout << "start graphd abc" << "\n";
   MockTracerOptions options;
   std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
   std::ostringstream& oss = *output;
@@ -63,6 +63,9 @@ int main(int argc, char *argv[]) {
   auto parent_span = tracer->StartSpan("parent");
   auto child_span =
         tracer->StartSpan("childA", {ChildOf(&parent_span->context())});
+  child_span->Finish();
+  parent_span->Finish();
+  tracer->Close();
   std::cout << oss.str() << "\n";
   google::SetVersionString(nebula::versionString());
   if (argc == 1) {

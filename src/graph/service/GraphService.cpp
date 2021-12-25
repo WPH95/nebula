@@ -29,16 +29,7 @@ namespace graph {
 Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecutor,
                           const HostAddr& hostAddr) {
 
-  MockTracerOptions traceOptions;
-  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
-  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
-      new JsonRecorder{std::move(output)}};
-
-  std::shared_ptr<opentracing::Tracer> tracer{
-      new MockTracer{std::move(traceOptions)}};
-
-
-
+  LOG(INFO) << "start init graph service" << "\n";
   auto addrs = network::NetworkUtils::toHosts(FLAGS_meta_server_addrs);
   if (!addrs.ok()) {
     return addrs.status();
@@ -49,7 +40,25 @@ Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecuto
   options.role_ = meta::cpp2::HostRole::GRAPH;
   options.localHost_ = hostAddr;
   options.gitInfoSHA_ = gitInfoSha();
+  LOG(INFO) << "start init graph service tracing" << "\n";
+ 
+  MockTracerOptions traceOptions;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  std::ostringstream& oss = *output;
+  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new JsonRecorder{std::move(output)}};
 
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(traceOptions)}};
+
+  auto parent_span = tracer->StartSpan("test init");
+  auto child_span =
+        tracer->StartSpan("test init childA", {ChildOf(&parent_span->context())});
+  child_span->Finish();
+  parent_span->Finish();
+  tracer->Close();
+  LOG(INFO) << oss.str() << "\n";
+  LOG(INFO) << "start init graph service tracing 55" << "\n";
   metaClient_ = std::make_unique<meta::MetaClient>(ioExecutor, std::move(addrs.value()), options);
 
   // load data try 3 time
@@ -74,6 +83,7 @@ Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecuto
 
 folly::Future<AuthResponse> GraphService::future_authenticate(const std::string& username,
                                                               const std::string& password) {
+
   auto* peer = getRequestContext()->getPeerAddress();
   auto clientIp = peer->getAddressStr();
   LOG(INFO) << "Authenticating user " << username << " from " << peer->describe();
@@ -132,6 +142,21 @@ void GraphService::signout(int64_t sessionId) {
 
 folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
                                                               const std::string& query) {
+  
+  LOG(INFO) << "start execute query " << query << "\n";
+ 
+  MockTracerOptions traceOptions;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  std::ostringstream& oss = *output;
+  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new JsonRecorder{std::move(output)}};
+
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(traceOptions)}};
+
+  auto parent_span = tracer->StartSpan("test query");
+  parent_span->SetTag("query", query);
+  
   auto ctx = std::make_unique<RequestContext<ExecutionResponse>>();
   ctx->setQuery(query);
   ctx->setRunner(getThreadManager());
@@ -166,6 +191,12 @@ folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
     queryEngine_->execute(std::move(ctx));
   };
   sessionManager_->findSession(sessionId, getThreadManager()).thenValue(std::move(cb));
+  
+  parent_span->Finish();
+  tracer->Close();
+  LOG(INFO) << oss.str() << "\n";
+  LOG(INFO) << "start query end" << "\n";
+
   return future;
 }
 
