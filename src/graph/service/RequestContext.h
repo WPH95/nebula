@@ -69,10 +69,10 @@ class RequestContext final : public cpp::NonCopyable, public cpp::NonMovable {
 
   void setSpan(std::unique_ptr<opentracing::Span> span) { span_ = std::move(span); }
 
-   opentracing::Span* span()  { return span_.get(); }
+  std::unique_ptr<opentracing::Span> span()  { return span_; }
 
   void setTracer(std::shared_ptr<opentracing::Tracer> tracer) { tracer_ = std::move(tracer ); }
-   opentracing::Tracer* tracer()  { return tracer_.get(); }
+  std::shared_ptr<opentracing::Tracer> tracer()  { return tracer_; }
   void setTraceOut(std::shared_ptr<std::ostringstream> traceOut) {traceOut_ = std::move(traceOut );}
    std::shared_ptr<std::ostringstream> traceOut() {return traceOut_;}
 

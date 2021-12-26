@@ -19,12 +19,33 @@
 #include <iostream>
 #include <sstream>
 #include <opentracing/mocktracer/json_recorder.h>
+#include <opentracing/mocktracer/recorder.h>
+#include <opentracing/mocktracer/json.h>
+
 #include <opentracing/mocktracer/tracer.h>
 using namespace opentracing;
 using namespace opentracing::mocktracer;
 
 namespace nebula {
 namespace graph {
+
+
+void AutoRecorder::RecordSpan(SpanData&& span_data) noexcept try {
+  std::lock_guard<std::mutex> lock_guard{mutex_};
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
+  std::ostringstream& oss = *output;
+  spans_.emplace_back(std::move(span_data));
+
+  mocktracer::ToJson(oss, spans_);
+  output->flush();
+  auto strdata = oss.str();
+  LOG(INFO) << strdata << "\n";
+  spans_.clear();
+
+
+} catch (const std::exception&) {
+  // Drop span.
+}
 
 Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecutor,
                           const HostAddr& hostAddr) {
@@ -51,7 +72,9 @@ Status GraphService::init(std::shared_ptr<folly::IOThreadPoolExecutor> ioExecuto
   }
 
   sessionManager_ = std::make_unique<GraphSessionManager>(metaClient_.get(), hostAddr);
+
   auto initSessionMgrStatus = sessionManager_->init();
+
   if (!initSessionMgrStatus.ok()) {
     LOG(ERROR) << "Failed to initialize session manager: " << initSessionMgrStatus.toString();
     return Status::Error("Failed to initialize session manager: %s",
@@ -123,27 +146,27 @@ void GraphService::signout(int64_t sessionId) {
 
 folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
                                                               const std::string& query) {
-  if (tracer_.get() == nullptr) {
-    MockTracerOptions traceOptions;
-    std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
-    traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
-        new JsonRecorder{std::move(output)}};
 
-    std::shared_ptr<opentracing::Tracer> tracer{
-        new MockTracer{std::move(traceOptions)}};
-    tracer_ = std::move(tracer);
-    traceOut = std::move(output);
+  MockTracerOptions traceOptions;
+  std::unique_ptr<std::ostringstream> output{new std::ostringstream{}};
 
-  }
+  traceOptions.recorder = std::unique_ptr<mocktracer::Recorder>{
+      new AutoRecorder{}
+  };
 
+  std::shared_ptr<opentracing::Tracer> tracer{
+      new MockTracer{std::move(traceOptions)}};
 
   LOG(INFO) << "start execute query " << query << "\n";
 
 
-  LOG(INFO) << tracer_ << query << "\n";
+  LOG(INFO) << tracer << query << "\n";
 
-  auto parent_span = tracer_ -> StartSpan("graph query");
+  auto parent_span = tracer -> StartSpan("graph query");
   parent_span->SetTag("query", query);
+  auto child_span = tracer->StartSpan("test init childA", {ChildOf(&parent_span->context())});
+  child_span->Finish();
+
   LOG(INFO) << "test3 " << query << "\n";
 
   auto ctx = std::make_unique<RequestContext<ExecutionResponse>>();
@@ -153,8 +176,8 @@ folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
   ctx->setSpan(std::move(parent_span));
   LOG(INFO) << "test15 " << query << "\n";
 
-  ctx->setTracer(std::move(tracer_));
-  ctx->setTraceOut(std::move(traceOut));
+  ctx->setTracer(std::move(tracer));
+  ctx->setTraceOut(std::move(output));
   ctx->setRunner(getThreadManager());
   ctx->setSessionMgr(sessionManager_.get());
   auto future = ctx->future();
@@ -187,21 +210,22 @@ folly::Future<ExecutionResponse> GraphService::future_execute(int64_t sessionId,
     }
     ctx->setSession(std::move(sessionPtr));
     LOG(INFO) << "Hello3" << "\n";
+    auto finaltracer = ctx -> tracer();
+    auto finaloutput = ctx -> traceOut();
     queryEngine_->execute(std::move(ctx));
     LOG(INFO) << "Hello2" << "\n";
-
-    auto *span = ctx->span();
-    span->Finish();
+    finaltracer ->Close();
+//    auto *span = ctx->span();
+//    span->Finish();
     LOG(INFO) << "parent_span finish" << "\n";
+    LOG(INFO) << finaloutput.get() << "\n";
 
-    ctx->traceOut();
+//    ctx->traceOut();
 //    LOG(INFO) << ctx->traceOut()  << "\n";
 
   };
   sessionManager_->findSession(sessionId, getThreadManager()).thenValue(std::move(cb));
   LOG(INFO) << "start query end" << "\n";
-      LOG(INFO) << traceOut -> str()  << "\n";
-      LOG(INFO) << "traceOut end" << "\n";
 
   return future;
 }

@@ -65,9 +65,9 @@ void QueryInstance::execute() {
 Status QueryInstance::validateAndOptimize() {
   LOG(INFO) << "Hello10" << "\n";
 
-  auto *rctx = qctx()->rctx();
+  auto rctx = qctx()->rctx();
 //  auto *parent_span = rctx->span();
-  auto *tracer = rctx->tracer();
+  auto tracer = rctx->tracer();
   LOG(INFO) << "Hello11" << "\n";
 
   auto child_span = tracer->StartSpan("validateAndOptimize");

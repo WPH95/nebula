@@ -10,7 +10,8 @@
 #include "graph/service/Authenticator.h"
 #include "graph/service/QueryEngine.h"
 #include "graph/session/GraphSessionManager.h"
-#include "interface/gen-cpp2/GraphService.h"
+#include <opentracing/mocktracer/recorder.h>
+#include <opentracing/mocktracer/symbols.h>
 
 namespace folly {
 class IOThreadPoolExecutor;
@@ -18,6 +19,17 @@ class IOThreadPoolExecutor;
 
 namespace nebula {
 namespace graph {
+
+class AutoRecorder final : public opentracing::mocktracer::Recorder {
+ public:
+
+  void RecordSpan(opentracing::mocktracer::SpanData&& span_data) noexcept override;
+
+ private:
+  std::mutex mutex_;
+  std::vector<opentracing::mocktracer::SpanData> spans_;
+};
+
 
 class GraphService final : public cpp2::GraphServiceSvIf {
  public:
@@ -52,7 +64,7 @@ class GraphService final : public cpp2::GraphServiceSvIf {
   std::unique_ptr<meta::MetaClient> metaClient_;
 
   std::unique_ptr<std::ostringstream> traceOut;
-  std::shared_ptr<opentracing::Tracer> tracer_;
+  std::shared_ptr<opentracing::Tracer> rootTracer_;
 
 };
 
